@@ -1,0 +1,221 @@
+#ifndef SERIALIZE_{{ message.name.upper() }}_H_
+#define SERIALIZE_{{ message.name.upper() }}_H_
+
+#include <stddef.h>
+#include <stdint.h>
+#include "common/common_types.h"
+#include "common/serialize_utils.h"
+
+{%- macro serialize_field(field, var_name, buffer_name, offset_name) %}
+{%- if field.is_string %}
+    // String field: {{ field.name }}
+    const uint32_t {{ field.name }}_len = {{ var_name }}->{{ field.name }}.size;
+    const uint32_t {{ field.name }}_len_with_null = {{ field.name }}_len + 1;
+    
+    if ({{ offset_name }} + sizeof(uint32_t) + {{ field.name }}_len_with_null > buffer_size) {
+        return 0;
+    }
+    
+    serialize_u32_be({{ buffer_name }} + {{ offset_name }}, {{ field.name }}_len_with_null);
+    {{ offset_name }} += sizeof(uint32_t);
+    
+    virt_memcpy({{ buffer_name }} + {{ offset_name }}, (const uint8_t*){{ var_name }}->{{ field.name }}.data, {{ field.name }}_len);
+    {{ buffer_name }}[{{ offset_name }} + {{ field.name }}_len] = '\0';
+    {{ offset_name }} += {{ field.name }}_len_with_null;
+{%- elif field.is_dynamic_array %}
+    // Dynamic array field: {{ field.name }}
+    const uint32_t {{ field.name }}_size = {{ var_name }}->{{ field.name }}.size;
+    
+    if ({{ offset_name }} + sizeof(uint32_t) > buffer_size) {
+        return 0;
+    }
+    
+    serialize_u32_be({{ buffer_name }} + {{ offset_name }}, {{ field.name }}_size);
+    {{ offset_name }} += sizeof(uint32_t);
+    
+    for (uint32_t i = 0; i < {{ field.name }}_size; ++i) {
+        {%- if field.type in ['uint8_t', 'int8_t', 'char', 'bool'] %}
+        if ({{ offset_name }} + 1 > buffer_size) return 0;
+        {{ buffer_name }}[{{ offset_name }}] = {{ var_name }}->{{ field.name }}.data[i];
+        {{ offset_name }} += 1;
+        {%- elif field.type in ['uint16_t', 'int16_t'] %}
+        if ({{ offset_name }} + 2 > buffer_size) return 0;
+        serialize_u16_be({{ buffer_name }} + {{ offset_name }}, {{ var_name }}->{{ field.name }}.data[i]);
+        {{ offset_name }} += 2;
+        {%- elif field.type in ['uint32_t', 'int32_t', 'float'] %}
+        if ({{ offset_name }} + 4 > buffer_size) return 0;
+        serialize_u32_be({{ buffer_name }} + {{ offset_name }}, *(uint32_t*)&{{ var_name }}->{{ field.name }}.data[i]);
+        {{ offset_name }} += 4;
+        {%- elif field.type in ['uint64_t', 'int64_t', 'double'] %}
+        if ({{ offset_name }} + 8 > buffer_size) return 0;
+        serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.data[i]);
+        {{ offset_name }} += 8;
+        {%- endif %}
+    }
+{%- elif field.is_array %}
+    // Fixed array field: {{ field.name }}
+    {%- if field.type in ['uint8_t', 'int8_t', 'char', 'bool'] %}
+    if ({{ offset_name }} + {{ field.array_size }} > buffer_size) return 0;
+    for (int i = 0; i < {{ field.array_size }}; ++i) {
+        {{ buffer_name }}[{{ offset_name }}] = {{ var_name }}->{{ field.name }}[i];
+        {{ offset_name }} += 1;
+    }
+    {%- elif field.type in ['uint16_t', 'int16_t'] %}
+    if ({{ offset_name }} + {{ field.array_size * 2 }} > buffer_size) return 0;
+    for (int i = 0; i < {{ field.array_size }}; ++i) {
+        serialize_u16_be({{ buffer_name }} + {{ offset_name }}, {{ var_name }}->{{ field.name }}[i]);
+        {{ offset_name }} += 2;
+    }
+    {%- elif field.type in ['uint32_t', 'int32_t', 'float'] %}
+    if ({{ offset_name }} + {{ field.array_size * 4 }} > buffer_size) return 0;
+    for (int i = 0; i < {{ field.array_size }}; ++i) {
+        serialize_u32_be({{ buffer_name }} + {{ offset_name }}, *(uint32_t*)&{{ var_name }}->{{ field.name }}[i]);
+        {{ offset_name }} += 4;
+    }
+    {%- elif field.type in ['uint64_t', 'int64_t', 'double'] %}
+    if ({{ offset_name }} + {{ field.array_size * 8 }} > buffer_size) return 0;
+    for (int i = 0; i < {{ field.array_size }}; ++i) {
+        serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}[i]);
+        {{ offset_name }} += 8;
+    }
+    {%- endif %}
+{%- else %}
+    // Scalar field: {{ field.name }}
+    {%- if field.type in ['uint8_t', 'int8_t', 'char', 'bool'] %}
+    if ({{ offset_name }} + 1 > buffer_size) return 0;
+    {{ buffer_name }}[{{ offset_name }}] = {{ var_name }}->{{ field.name }};
+    {{ offset_name }} += 1;
+    {%- elif field.type in ['uint16_t', 'int16_t'] %}
+    if ({{ offset_name }} + 2 > buffer_size) return 0;
+    serialize_u16_be({{ buffer_name }} + {{ offset_name }}, {{ var_name }}->{{ field.name }});
+    {{ offset_name }} += 2;
+    {%- elif field.type in ['uint32_t', 'int32_t', 'float'] %}
+    if ({{ offset_name }} + 4 > buffer_size) return 0;
+    serialize_u32_be({{ buffer_name }} + {{ offset_name }}, *(uint32_t*)&{{ var_name }}->{{ field.name }});
+    {{ offset_name }} += 4;
+    {%- elif field.type in ['uint64_t', 'int64_t', 'double'] %}
+    if ({{ offset_name }} + 8 > buffer_size) return 0;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }});
+    {{ offset_name }} += 8;
+    {%- elif field.type == 'geometry_msgs__msg__Vector3' %}
+    // Vector3 field: {{ field.name }}
+    if ({{ offset_name }} + 24 > buffer_size) return 0;  // 3 * 8 bytes for doubles
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.x);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.y);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.z);
+    {{ offset_name }} += 8;
+    {%- elif field.type == 'geometry_msgs__msg__Point' %}
+    // Point field: {{ field.name }}
+    if ({{ offset_name }} + 24 > buffer_size) return 0;  // 3 * 8 bytes for doubles
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.x);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.y);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.z);
+    {{ offset_name }} += 8;
+    {%- elif field.type == 'geometry_msgs__msg__Quaternion' %}
+    // Quaternion field: {{ field.name }}
+    if ({{ offset_name }} + 32 > buffer_size) return 0;  // 4 * 8 bytes for doubles
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.x);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.y);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.z);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.w);
+    {{ offset_name }} += 8;
+    {%- elif field.type == 'geometry_msgs__msg__Pose' %}
+    // Pose field: {{ field.name }}
+    // Position (Point)
+    if ({{ offset_name }} + 24 > buffer_size) return 0;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.position.x);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.position.y);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.position.z);
+    {{ offset_name }} += 8;
+    // Orientation (Quaternion)
+    if ({{ offset_name }} + 32 > buffer_size) return 0;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.orientation.x);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.orientation.y);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.orientation.z);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.orientation.w);
+    {{ offset_name }} += 8;
+    {%- elif field.type == 'geometry_msgs__msg__PoseWithCovariance' %}
+    // PoseWithCovariance field: {{ field.name }}
+    // Pose
+    if ({{ offset_name }} + 56 > buffer_size) return 0;  // 7 * 8 bytes for pose
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.pose.position.x);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.pose.position.y);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.pose.position.z);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.pose.orientation.x);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.pose.orientation.y);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.pose.orientation.z);
+    {{ offset_name }} += 8;
+    serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.pose.orientation.w);
+    {{ offset_name }} += 8;
+    // Covariance array (36 doubles)
+    if ({{ offset_name }} + 288 > buffer_size) return 0;  // 36 * 8 bytes for covariance
+    for (int i = 0; i < 36; ++i) {
+        serialize_u64_be({{ buffer_name }} + {{ offset_name }}, *(uint64_t*)&{{ var_name }}->{{ field.name }}.covariance[i]);
+        {{ offset_name }} += 8;
+    }
+    {%- elif field.type == 'builtin_interfaces__msg__Time' %}
+    // Time field: {{ field.name }}
+    if ({{ offset_name }} + 8 > buffer_size) return 0;  // 4 + 4 bytes for time
+    serialize_u32_be({{ buffer_name }} + {{ offset_name }}, (uint32_t){{ var_name }}->{{ field.name }}.sec);
+    {{ offset_name }} += 4;
+    serialize_u32_be({{ buffer_name }} + {{ offset_name }}, {{ var_name }}->{{ field.name }}.nanosec);
+    {{ offset_name }} += 4;
+    {%- elif field.type == 'std_msgs__msg__Header' %}
+    // Header field: {{ field.name }}
+    // Time stamp
+    if ({{ offset_name }} + 8 > buffer_size) return 0;
+    serialize_u32_be({{ buffer_name }} + {{ offset_name }}, (uint32_t){{ var_name }}->{{ field.name }}.stamp.sec);
+    {{ offset_name }} += 4;
+    serialize_u32_be({{ buffer_name }} + {{ offset_name }}, {{ var_name }}->{{ field.name }}.stamp.nanosec);
+    {{ offset_name }} += 4;
+    // Frame ID (string)
+    const uint32_t {{ field.name }}_frame_id_len = {{ var_name }}->{{ field.name }}.frame_id.size;
+    const uint32_t {{ field.name }}_frame_id_len_with_null = {{ field.name }}_frame_id_len + 1;
+    if ({{ offset_name }} + sizeof(uint32_t) + {{ field.name }}_frame_id_len_with_null > buffer_size) {
+        return 0;
+    }
+    serialize_u32_be({{ buffer_name }} + {{ offset_name }}, {{ field.name }}_frame_id_len_with_null);
+    {{ offset_name }} += sizeof(uint32_t);
+    virt_memcpy({{ buffer_name }} + {{ offset_name }}, (const uint8_t*){{ var_name }}->{{ field.name }}.frame_id.data, {{ field.name }}_frame_id_len);
+    {{ buffer_name }}[{{ offset_name }} + {{ field.name }}_frame_id_len] = '\0';
+    {{ offset_name }} += {{ field.name }}_frame_id_len_with_null;
+    {%- else %}
+    // Unknown type: {{ field.type }}
+    #error "Unsupported field type: {{ field.type }}"
+    {%- endif %}
+{%- endif %}
+{%- endmacro %}
+
+size_t serialize_{{ message.name.lower() }}_big_endian(const {{ message.package }}__msg__{{ message.name }}* msg, uint8_t* buffer, size_t buffer_size)
+{
+    if (msg == NULL || buffer == NULL) {
+        return 0;
+    }
+    
+    size_t offset = 0;
+    
+{%- for field in message.fields %}
+    {{ serialize_field(field, "msg", "buffer", "offset") }}
+{%- endfor %}
+    
+    return offset;
+}
+
+#endif // SERIALIZE_{{ message.name.upper() }}_H_

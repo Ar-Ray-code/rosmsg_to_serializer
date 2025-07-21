@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rosmsg_to_serializer"
+version = "0.0.0"
+description = "rosmsg_to_serializer: Generate C/C++ serializers and deserializers from ROS2 message definitions dynamically."
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Ar-Ray-code", email = "ray255ar@gmail.com"},
+]
+keywords = ["rosmsg", "serialization", "code-generation", "dynamic"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: System :: Hardware",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "jinja2>=3.0.0",
+]
+dynamic = ["readme"]
+
+[project.urls]
+Homepage = "https://github.com/Ar-Ray-code/rosmsg_to_serializer"
+Repository = "https://github.com/Ar-Ray-code/rosmsg_to_serializer"
+Documentation = "https://github.com/Ar-Ray-code/rosmsg_to_serializer#readme"
+Issues = "https://github.com/Ar-Ray-code/rosmsg_to_serializer/issues"
+
+[project.entry-points."console_scripts"]
+msg_integration_generator = "rosmsg_to_serializer.msg_integration_generator:main"
+
+[tool.setuptools]
+packages = ["rosmsg_to_serializer", "rosmsg_to_serializer.module"]
+include-package-data = true
+
+[tool.setuptools.package-data]
+rosmsg_to_serializer = [
+    "templates/*.j2",
+    "templates/*.h.j2",
+]
+
+[tool.setuptools.dynamic]
+readme = {file = ["README.md"], content-type = "text/markdown"}
